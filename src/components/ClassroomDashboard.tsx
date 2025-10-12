@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Tooltip, CartesianGrid, XAxis, YAxis, Legend, BarChart, Bar } from "recharts";
 import { motion } from "framer-motion";
+import Navigation from "@/components/Navigation";
 
 const BEHAVIORS = ["Attentive", "Sleeping", "Talking", "Phone"];
 
@@ -124,7 +125,8 @@ export default function ClassroomDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground transition-colors"> 
+    <div className="min-h-screen bg-background text-foreground transition-colors">
+      <Navigation />
       <div className="max-w-7xl mx-auto p-4 md:p-6">
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <div>
