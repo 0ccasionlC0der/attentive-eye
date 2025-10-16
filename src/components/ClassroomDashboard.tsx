@@ -1,46 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Tooltip, CartesianGrid, XAxis, YAxis, Legend, BarChart, Bar } from "recharts";
 import { motion } from "framer-motion";
+import { loadActivityLog, getBehaviorBreakdown, getEngagementOverTime } from "@/utils/csvParser";
 import Navigation from "@/components/Navigation";
 
 const BEHAVIORS = ["Attentive", "Sleeping", "Talking", "Phone"];
-
-function generateMockSessionData(durationMinutes = 60, intervalSec = 30) {
-  const points = [];
-  const totalStudents = 25;
-  const steps = Math.ceil((durationMinutes * 60) / intervalSec);
-  let baseAttentive = Math.round(totalStudents * 0.75);
-
-  for (let i = 0; i < steps; i++) {
-    const t = i * (intervalSec / 60);
-    const drift = Math.round(3 * Math.sin(i / 8) + (Math.random() - 0.5) * 2);
-    const attentive = Math.max(0, Math.min(totalStudents, baseAttentive + drift + Math.round((Math.random() - 0.5) * 3)));
-    const sleeping = Math.max(0, Math.round((totalStudents - attentive) * Math.random() * 0.5));
-    const phone = Math.max(0, Math.round((totalStudents - attentive - sleeping) * Math.random() * 0.7));
-    const talking = Math.max(0, totalStudents - attentive - sleeping - phone);
-    points.push({
-      time: `${Math.floor(t)}:${String((i * intervalSec) % 60).padStart(2, "0")}`,
-      Attentive: attentive,
-      Sleeping: sleeping,
-      Phone: phone,
-      Talking: talking,
-      total: totalStudents,
-      attentivePct: Math.round((attentive / totalStudents) * 100),
-    });
-  }
-  return { points, totalStudents };
-}
-
-function generateMockAttendanceLog(totalStudents = 25) {
-  const log = [];
-  for (let i = 0; i < totalStudents; i++) {
-    const id = `S${String(1000 + i)}`;
-    const detectedTime = new Date(Date.now() - Math.round(Math.random() * 1000 * 60 * 60)).toLocaleTimeString();
-    const status = BEHAVIORS[Math.floor(Math.random() * BEHAVIORS.length)];
-    log.push({ studentId: id, detectedTime, status });
-  }
-  return log;
-}
 
 const COLORS = {
   Attentive: "hsl(var(--chart-1))",
@@ -51,17 +15,59 @@ const COLORS = {
 
 export default function ClassroomDashboard() {
   const [dark, setDark] = useState(false);
-  const [session] = useState(() => generateMockSessionData(60, 30));
-  const [sessionPoints, setSessionPoints] = useState(session.points);
-  const [attendanceLog, setAttendanceLog] = useState(() => generateMockAttendanceLog(session.totalStudents));
-  const [snapshot, setSnapshot] = useState(() => {
-    const last = session.points[session.points.length - 1];
-    return {
-      totalDetected: last.total,
-      engagementPct: last.attentivePct,
-      breakdown: { Attentive: last.Attentive, Sleeping: last.Sleeping, Talking: last.Talking, Phone: last.Phone },
-    };
+  const [loading, setLoading] = useState(true);
+  const [sessionPoints, setSessionPoints] = useState<any[]>([]);
+  const [attendanceLog, setAttendanceLog] = useState<any[]>([]);
+  const [snapshot, setSnapshot] = useState({
+    totalDetected: 0,
+    engagementPct: 0,
+    breakdown: { Attentive: 0, Sleeping: 0, Talking: 0, Phone: 0 },
   });
+
+  // Load real data from CSV
+  useEffect(() => {
+    loadActivityLog().then(records => {
+      const breakdown = getBehaviorBreakdown(records);
+      const engagement = getEngagementOverTime(records, 1);
+      
+      const uniqueStudents = new Set(records.map(r => r.studentId)).size;
+      const attentiveCount = records.filter(r => r.activity === 'Studying/Attentive').length;
+      const engagementPct = Math.round((attentiveCount / records.length) * 100);
+      
+      const breakdownObj = {
+        Attentive: breakdown.find(b => b.name === 'Studying/Attentive')?.value || 0,
+        Sleeping: breakdown.find(b => b.name === 'Sleeping')?.value || 0,
+        Talking: breakdown.find(b => b.name === 'Talking in Class')?.value || 0,
+        Phone: breakdown.find(b => b.name === 'Phone')?.value || 0,
+      };
+      
+      setSnapshot({
+        totalDetected: uniqueStudents,
+        engagementPct,
+        breakdown: breakdownObj
+      });
+      
+      setSessionPoints(engagement);
+      
+      // Create attendance log from records
+      const logEntries = Array.from(new Set(records.map(r => r.studentId)))
+        .slice(0, 25)
+        .map(id => {
+          const studentRecords = records.filter(r => r.studentId === id);
+          const latestRecord = studentRecords[studentRecords.length - 1];
+          return {
+            studentId: `S${1000 + id}`,
+            detectedTime: new Date(latestRecord.timestamp).toLocaleTimeString(),
+            status: latestRecord.activity === 'Studying/Attentive' ? 'Attentive' : 
+                    latestRecord.activity === 'Talking in Class' ? 'Talking' :
+                    latestRecord.activity === 'Sleeping' ? 'Sleeping' : 'Phone'
+          };
+        });
+      
+      setAttendanceLog(logEntries);
+      setLoading(false);
+    });
+  }, []);
 
   useEffect(() => {
     if (dark) {
@@ -71,42 +77,16 @@ export default function ClassroomDashboard() {
     }
   }, [dark]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSessionPoints((prev) => {
-        const next = [...prev];
-        const last = next[next.length - 1];
-        const total = last.total;
-        const jitter = () => Math.round((Math.random() - 0.5) * 2);
-        const attentive = Math.max(0, Math.min(total, last.Attentive + jitter()));
-        const sleeping = Math.max(0, Math.round((total - attentive) * Math.random() * 0.4));
-        const phone = Math.max(0, Math.round((total - attentive - sleeping) * Math.random() * 0.6));
-        const talking = Math.max(0, total - attentive - sleeping - phone);
-        const newPoint = {
-          time: new Date().toLocaleTimeString(),
-          Attentive: attentive,
-          Sleeping: sleeping,
-          Phone: phone,
-          Talking: talking,
-          total,
-          attentivePct: Math.round((attentive / total) * 100),
-        };
-        next.push(newPoint);
-        if (next.length > 120) next.shift();
-        setSnapshot({ totalDetected: total, engagementPct: newPoint.attentivePct, breakdown: { Attentive: attentive, Sleeping: sleeping, Talking: talking, Phone: phone } });
-        setAttendanceLog((log) => log.map((r) => (Math.random() > 0.995 ? { ...r, status: BEHAVIORS[Math.floor(Math.random() * BEHAVIORS.length)] } : r)));
-        return next;
-      });
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
   const behaviorTotals = useMemo(() => {
-    const last = sessionPoints[sessionPoints.length - 1];
-    return BEHAVIORS.map((b) => ({ name: b, value: last[b] }));
-  }, [sessionPoints]);
+    return [
+      { name: 'Attentive', value: snapshot.breakdown.Attentive },
+      { name: 'Sleeping', value: snapshot.breakdown.Sleeping },
+      { name: 'Talking', value: snapshot.breakdown.Talking },
+      { name: 'Phone', value: snapshot.breakdown.Phone }
+    ];
+  }, [snapshot]);
 
-  const attentiveSeries = useMemo(() => sessionPoints.map((p) => ({ name: p.time, AttentivePct: p.attentivePct })), [sessionPoints]);
+  const attentiveSeries = useMemo(() => sessionPoints, [sessionPoints]);
 
   const studentRisk = useMemo(() => {
     return attendanceLog
@@ -123,6 +103,17 @@ export default function ClassroomDashboard() {
     navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
     alert("Snapshot copied to clipboard (JSON)");
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center">Loading classroom data from CSV...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors">
@@ -229,24 +220,6 @@ export default function ClassroomDashboard() {
               </div>
             </div>
 
-            <div className="p-6 rounded-xl shadow-sm bg-card border border-border">
-              <h3 className="text-sm font-medium text-muted-foreground mb-4">Behavior Counts Timeline</h3>
-              <div style={{ width: "100%", height: 320 }}>
-                <ResponsiveContainer>
-                  <BarChart data={sessionPoints.slice(-12)}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="time" className="text-xs" />
-                    <YAxis className="text-xs" />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="Attentive" stackId="a" fill={COLORS.Attentive} />
-                    <Bar dataKey="Talking" stackId="a" fill={COLORS.Talking} />
-                    <Bar dataKey="Phone" stackId="a" fill={COLORS.Phone} />
-                    <Bar dataKey="Sleeping" stackId="a" fill={COLORS.Sleeping} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
           </section>
 
           <aside className="lg:col-span-4 space-y-6">

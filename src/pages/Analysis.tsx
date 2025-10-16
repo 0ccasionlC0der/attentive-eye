@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Navigation from "@/components/Navigation";
 import { motion } from "framer-motion";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line } from "recharts";
 import { Search, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { loadActivityLog, calculateStudentSummaries, type StudentSummary } from "@/utils/csvParser";
 
 interface StudentActivity {
   studentId: string;
@@ -18,47 +19,27 @@ interface StudentActivity {
   }>;
 }
 
-function generateMockStudentData(): StudentActivity[] {
-  const students: StudentActivity[] = [];
-  const totalSessionMinutes = 60;
-
-  for (let i = 0; i < 25; i++) {
-    const attentiveMin = Math.round(30 + Math.random() * 25);
-    const timeline = [];
-    let currentTime = 0;
-
-    while (currentTime < totalSessionMinutes) {
-      const behaviors: Array<"Attentive" | "Sleeping" | "Talking" | "Phone"> = [
-        "Attentive",
-        "Sleeping",
-        "Talking",
-        "Phone",
-      ];
-      const behavior = behaviors[Math.floor(Math.random() * behaviors.length)];
-      const duration = Math.round(5 + Math.random() * 10);
-
-      timeline.push({
-        time: `${Math.floor(currentTime / 60)}:${String(currentTime % 60).padStart(2, "0")}`,
-        behavior,
-        duration: Math.min(duration, totalSessionMinutes - currentTime),
-      });
-
-      currentTime += duration;
-    }
-
-    students.push({
-      studentId: `S${1000 + i}`,
-      name: `Student ${i + 1}`,
-      totalMinutes: totalSessionMinutes,
-      attentiveMinutes: attentiveMin,
-      inattentiveMinutes: totalSessionMinutes - attentiveMin,
-      attentivePercentage: Math.round((attentiveMin / totalSessionMinutes) * 100),
-      timeline,
-    });
-  }
-
-  return students.sort((a, b) => b.attentivePercentage - a.attentivePercentage);
-}
+// Map CSV data to StudentActivity format
+const mapToStudentActivity = (summary: StudentSummary): StudentActivity => {
+  return {
+    studentId: `S${1000 + summary.studentId}`,
+    name: `Student ${summary.studentId}`,
+    totalMinutes: summary.totalMinutes || 60,
+    attentiveMinutes: summary.attentiveMinutes,
+    inattentiveMinutes: summary.inattentiveMinutes,
+    attentivePercentage: summary.engagementPct,
+    timeline: summary.timeline.slice(0, 50).map(t => { // Limit to 50 points for performance
+      const time = new Date(t.time);
+      return {
+        time: `${time.getHours()}:${String(time.getMinutes()).padStart(2, '0')}`,
+        behavior: t.behavior === 'Studying/Attentive' ? 'Attentive' as const : 
+                  t.behavior === 'Talking in Class' ? 'Talking' as const : 
+                  t.behavior === 'Sleeping' ? 'Sleeping' as const : 'Phone' as const,
+        duration: 1
+      };
+    })
+  };
+};
 
 const COLORS = {
   Attentive: "hsl(var(--chart-1))",
@@ -68,9 +49,19 @@ const COLORS = {
 };
 
 export default function Analysis() {
-  const [students] = useState<StudentActivity[]>(generateMockStudentData);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<StudentActivity | null>(null);
+  const [students, setStudents] = useState<StudentActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadActivityLog().then(records => {
+      const summaries = calculateStudentSummaries(records);
+      const activities = summaries.map(mapToStudentActivity);
+      setStudents(activities);
+      setLoading(false);
+    });
+  }, []);
 
   const filteredStudents = useMemo(() => {
     return students.filter(
@@ -93,6 +84,17 @@ export default function Analysis() {
     if (percentage >= 60) return <Minus className="w-4 h-4 text-warning" />;
     return <TrendingDown className="w-4 h-4 text-destructive" />;
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center">Loading real activity data...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
