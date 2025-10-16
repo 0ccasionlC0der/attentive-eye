@@ -2,51 +2,61 @@ import { useState, useEffect } from "react";
 import Navigation from "@/components/Navigation";
 import CameraFeed from "@/components/CameraFeed";
 import { motion } from "framer-motion";
-import { CheckCircle, XCircle, Clock, Users } from "lucide-react";
+import { CheckCircle, XCircle, Users } from "lucide-react";
+import { loadActivityLog } from "@/utils/csvParser";
 
 interface Student {
-  id: string;
+  id: number;
   name: string;
-  status: "present" | "absent" | "late";
+  status: "present" | "absent";
   detectedAt?: string;
 }
 
 export default function Attendance() {
-  const [totalStudents] = useState(25);
-  const [detectedCount, setDetectedCount] = useState(0);
   const [students, setStudents] = useState<Student[]>([]);
+  const [detectedCount, setDetectedCount] = useState(0);
+  const [loading, setLoading] = useState(true);
 
+  // Load student attendance from CSV
   useEffect(() => {
-    // Initialize student list
-    const initialStudents: Student[] = [];
-    for (let i = 0; i < totalStudents; i++) {
-      initialStudents.push({
-        id: `S${1000 + i}`,
-        name: `Student ${i + 1}`,
-        status: "absent",
-      });
-    }
-    setStudents(initialStudents);
-  }, [totalStudents]);
+    loadActivityLog().then(records => {
+      const uniqueStudentIds = new Set<number>();
+      records.forEach(r => uniqueStudentIds.add(r.studentId));
+      
+      const studentList: Student[] = Array.from(uniqueStudentIds)
+        .sort((a, b) => a - b)
+        .map(id => ({
+          id,
+          name: `Student ${id}`,
+          status: "present" as const,
+          detectedAt: new Date(records.find(r => r.studentId === id)?.timestamp || '').toLocaleTimeString()
+        }));
+      
+      setStudents(studentList);
+      setDetectedCount(studentList.length);
+      setLoading(false);
+    });
+  }, []);
 
   const handleFacesDetected = () => {
-    // Simulate marking students as present when faces are detected
-    setStudents((prev) => {
-      const updated = [...prev];
-      const absent = updated.filter((s) => s.status === "absent");
-      if (absent.length > 0 && Math.random() > 0.7) {
-        const randomStudent = absent[Math.floor(Math.random() * absent.length)];
-        randomStudent.status = "present";
-        randomStudent.detectedAt = new Date().toLocaleTimeString();
-      }
-      return updated;
-    });
+    // Camera feed simulation - data already loaded from CSV
   };
 
-  const presentCount = students.filter((s) => s.status === "present").length;
-  const absentCount = students.filter((s) => s.status === "absent").length;
-  const lateCount = students.filter((s) => s.status === "late").length;
-  const attendanceRate = Math.round((presentCount / totalStudents) * 100);
+  const totalStudents = students.length;
+  const presentCount = students.filter(s => s.status === "present").length;
+  const absentCount = students.filter(s => s.status === "absent").length;
+  const attendanceRate = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center">Loading attendance data...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -66,7 +76,7 @@ export default function Attendance() {
               onFacesDetected={handleFacesDetected}
             />
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div className="p-4 rounded-xl bg-card border border-border">
                 <div className="flex items-center gap-2 mb-2">
                   <Users className="w-4 h-4 text-muted-foreground" />
@@ -87,13 +97,6 @@ export default function Attendance() {
                   <span className="text-xs text-muted-foreground">Absent</span>
                 </div>
                 <div className="text-2xl font-bold text-destructive">{absentCount}</div>
-              </div>
-              <div className="p-4 rounded-xl bg-card border border-border">
-                <div className="flex items-center gap-2 mb-2">
-                  <Clock className="w-4 h-4 text-warning" />
-                  <span className="text-xs text-muted-foreground">Attendance</span>
-                </div>
-                <div className="text-2xl font-bold text-primary">{attendanceRate}%</div>
               </div>
             </div>
 
@@ -137,19 +140,13 @@ export default function Attendance() {
                       )}
                     </div>
                     <div>
-                      {student.status === "present" && (
+                      {student.status === "present" ? (
                         <span className="px-2 py-1 rounded-md text-xs font-medium bg-success/20 text-success">
                           Present
                         </span>
-                      )}
-                      {student.status === "absent" && (
+                      ) : (
                         <span className="px-2 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground">
                           Absent
-                        </span>
-                      )}
-                      {student.status === "late" && (
-                        <span className="px-2 py-1 rounded-md text-xs font-medium bg-warning/20 text-warning">
-                          Late
                         </span>
                       )}
                     </div>

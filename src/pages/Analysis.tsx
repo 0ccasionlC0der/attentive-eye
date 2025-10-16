@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import Navigation from "@/components/Navigation";
 import { motion } from "framer-motion";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line } from "recharts";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, PieChart, Pie, Cell, Area, AreaChart } from "recharts";
 import { Search, TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { loadActivityLog, calculateStudentSummaries, type StudentSummary } from "@/utils/csvParser";
+import { loadActivityLog, calculateStudentSummaries, getBehaviorBreakdown, getEngagementOverTime, type StudentSummary, type ActivityRecord } from "@/utils/csvParser";
 
 interface StudentActivity {
   studentId: string;
@@ -52,11 +52,13 @@ export default function Analysis() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<StudentActivity | null>(null);
   const [students, setStudents] = useState<StudentActivity[]>([]);
+  const [records, setRecords] = useState<ActivityRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadActivityLog().then(records => {
-      const summaries = calculateStudentSummaries(records);
+    loadActivityLog().then(loadedRecords => {
+      setRecords(loadedRecords);
+      const summaries = calculateStudentSummaries(loadedRecords);
       const activities = summaries.map(mapToStudentActivity);
       setStudents(activities);
       setLoading(false);
@@ -78,6 +80,57 @@ export default function Analysis() {
       Inattentive: s.inattentiveMinutes,
     }));
   }, [filteredStudents]);
+
+  const pieData = useMemo(() => {
+    return getBehaviorBreakdown(records);
+  }, [records]);
+
+  const engagementOverTimeData = useMemo(() => {
+    if (records.length === 0) return [];
+    
+    // Group by 5-minute intervals
+    const timeMap = new Map<string, { 
+      Attentive: number, 
+      Sleeping: number, 
+      Talking: number, 
+      Phone: number,
+      total: number 
+    }>();
+    
+    records.forEach(record => {
+      const date = new Date(record.timestamp);
+      const intervalKey = `${date.getHours()}:${String(Math.floor(date.getMinutes() / 5) * 5).padStart(2, '0')}`;
+      
+      if (!timeMap.has(intervalKey)) {
+        timeMap.set(intervalKey, { Attentive: 0, Sleeping: 0, Talking: 0, Phone: 0, total: 0 });
+      }
+      
+      const interval = timeMap.get(intervalKey)!;
+      interval.total++;
+      
+      if (record.activity === 'Studying/Attentive') {
+        interval.Attentive++;
+      } else if (record.activity === 'Sleeping') {
+        interval.Sleeping++;
+      } else if (record.activity === 'Talking in Class') {
+        interval.Talking++;
+      } else if (record.activity.includes('Phone')) {
+        interval.Phone++;
+      }
+    });
+    
+    return Array.from(timeMap.entries())
+      .map(([time, data]) => ({
+        time,
+        Attentive: Math.round((data.Attentive / data.total) * 100),
+        Sleeping: Math.round((data.Sleeping / data.total) * 100),
+        Talking: Math.round((data.Talking / data.total) * 100),
+        Phone: Math.round((data.Phone / data.total) * 100),
+      }))
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }, [records]);
+
+  const PIE_COLORS = [COLORS.Attentive, COLORS.Sleeping, COLORS.Talking, COLORS.Phone];
 
   const getTrendIcon = (percentage: number) => {
     if (percentage >= 80) return <TrendingUp className="w-4 h-4 text-success" />;
@@ -109,21 +162,71 @@ export default function Analysis() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="p-6 rounded-xl bg-card border border-border">
+                <h3 className="text-sm font-medium text-muted-foreground mb-4">
+                  Behavior Distribution
+                </h3>
+                <div style={{ width: "100%", height: 300 }}>
+                  <ResponsiveContainer>
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="p-6 rounded-xl bg-card border border-border">
+                <h3 className="text-sm font-medium text-muted-foreground mb-4">
+                  Top 10 Students by Engagement
+                </h3>
+                <div style={{ width: "100%", height: 300 }}>
+                  <ResponsiveContainer>
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="name" className="text-xs" />
+                      <YAxis className="text-xs" />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="Attentive" stackId="a" fill={COLORS.Attentive} />
+                      <Bar dataKey="Inattentive" stackId="a" fill={COLORS.Sleeping} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
             <div className="p-6 rounded-xl bg-card border border-border">
               <h3 className="text-sm font-medium text-muted-foreground mb-4">
-                Top 10 Students by Engagement
+                Engagement Over Time
               </h3>
               <div style={{ width: "100%", height: 300 }}>
                 <ResponsiveContainer>
-                  <BarChart data={chartData}>
+                  <AreaChart data={engagementOverTimeData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="name" className="text-xs" />
-                    <YAxis className="text-xs" />
+                    <XAxis dataKey="time" className="text-xs" />
+                    <YAxis className="text-xs" label={{ value: '%', angle: -90, position: 'insideLeft' }} />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="Attentive" stackId="a" fill={COLORS.Attentive} />
-                    <Bar dataKey="Inattentive" stackId="a" fill={COLORS.Sleeping} />
-                  </BarChart>
+                    <Area type="monotone" dataKey="Attentive" stackId="1" stroke={COLORS.Attentive} fill={COLORS.Attentive} />
+                    <Area type="monotone" dataKey="Sleeping" stackId="1" stroke={COLORS.Sleeping} fill={COLORS.Sleeping} />
+                    <Area type="monotone" dataKey="Talking" stackId="1" stroke={COLORS.Talking} fill={COLORS.Talking} />
+                    <Area type="monotone" dataKey="Phone" stackId="1" stroke={COLORS.Phone} fill={COLORS.Phone} />
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
             </div>

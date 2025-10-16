@@ -49,20 +49,17 @@ export default function ClassroomDashboard() {
       
       setSessionPoints(engagement);
       
-      // Create attendance log from records
-      const logEntries = Array.from(new Set(records.map(r => r.studentId)))
-        .slice(0, 25)
-        .map(id => {
-          const studentRecords = records.filter(r => r.studentId === id);
-          const latestRecord = studentRecords[studentRecords.length - 1];
-          return {
-            studentId: `S${1000 + id}`,
-            detectedTime: new Date(latestRecord.timestamp).toLocaleTimeString(),
-            status: latestRecord.activity === 'Studying/Attentive' ? 'Attentive' : 
-                    latestRecord.activity === 'Talking in Class' ? 'Talking' :
-                    latestRecord.activity === 'Sleeping' ? 'Sleeping' : 'Phone'
-          };
-        });
+      // Create attendance log showing Present/Absent status
+      const uniqueStudentIds = Array.from(new Set(records.map(r => r.studentId)));
+      const logEntries = uniqueStudentIds.slice(0, 25).map(id => {
+        const studentRecords = records.filter(r => r.studentId === id);
+        const latestRecord = studentRecords[studentRecords.length - 1];
+        return {
+          studentId: `S${1000 + id}`,
+          detectedTime: new Date(latestRecord.timestamp).toLocaleTimeString(),
+          status: 'Present'
+        };
+      });
       
       setAttendanceLog(logEntries);
       setLoading(false);
@@ -121,8 +118,8 @@ export default function ClassroomDashboard() {
       <div className="max-w-7xl mx-auto p-4 md:p-6">
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Class Analytics</h1>
-            <p className="text-sm text-muted-foreground mt-1">Real-time classroom engagement & attendance tracking</p>
+            <h1 className="text-3xl font-bold tracking-tight">Classroom Activity Monitor</h1>
+            <p className="text-sm text-muted-foreground mt-1">Real-time classroom activity tracking and analytics</p>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -234,13 +231,13 @@ export default function ClassroomDashboard() {
                       <th className="pb-3 font-medium">Status</th>
                     </tr>
                   </thead>
-                  <tbody>
+                   <tbody>
                     {attendanceLog.slice(0, 50).map((r) => (
                       <tr key={r.studentId} className="border-b border-border/50">
                         <td className="py-3 font-medium">{r.studentId}</td>
                         <td className="py-3 text-muted-foreground text-xs">{r.detectedTime}</td>
                         <td className="py-3">
-                          <span className="px-2 py-1 rounded-md text-xs font-medium" style={{ background: `${COLORS[r.status]}20`, color: COLORS[r.status] }}>
+                          <span className="px-2 py-1 rounded-md text-xs font-medium bg-success/20 text-success">
                             {r.status}
                           </span>
                         </td>
