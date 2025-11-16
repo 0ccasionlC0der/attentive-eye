@@ -130,12 +130,12 @@ export function getBehaviorBreakdown(records: ActivityRecord[]) {
   return Object.entries(counts).map(([name, value]) => ({ name, value }));
 }
 
-export function getEngagementOverTime(records: ActivityRecord[], intervalMinutes = 5) {
+export function getEngagementOverTime(records: ActivityRecord[], intervalSeconds = 10) {
   const timeMap = new Map<string, { total: number; attentive: number }>();
   
   records.forEach(record => {
     const date = new Date(record.timestamp);
-    const intervalKey = `${date.getHours()}:${Math.floor(date.getMinutes() / intervalMinutes) * intervalMinutes}`;
+    const intervalKey = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(Math.floor(date.getSeconds() / intervalSeconds) * intervalSeconds).padStart(2, '0')}`;
     
     if (!timeMap.has(intervalKey)) {
       timeMap.set(intervalKey, { total: 0, attentive: 0 });

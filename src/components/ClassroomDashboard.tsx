@@ -28,7 +28,7 @@ export default function ClassroomDashboard() {
   useEffect(() => {
     loadActivityLog().then(records => {
       const breakdown = getBehaviorBreakdown(records);
-      const engagement = getEngagementOverTime(records, 1);
+      const engagement = getEngagementOverTime(records, 10);
       
       const uniqueStudents = new Set(records.map(r => r.studentId)).size;
       const attentiveCount = records.filter(r => r.activity === 'Studying/Attentive').length;
@@ -179,21 +179,41 @@ export default function ClassroomDashboard() {
 
             <div className="p-6 rounded-xl shadow-sm bg-card border border-border">
               <h3 className="text-sm font-medium text-muted-foreground mb-4">Behavior Distribution</h3>
-              <div style={{ width: "100%", height: 280 }}>
+              <div style={{ width: "100%", height: 350 }}>
                 <ResponsiveContainer>
-                  <PieChart>
+                  <PieChart margin={{ top: 20, right: 20, bottom: 60, left: 20 }}>
                     <Pie
                       data={behaviorTotals}
                       dataKey="value"
                       nameKey="name"
-                      outerRadius={90}
-                      label={(entry) => `${entry.name}: ${entry.value}`}
+                      cx="50%"
+                      cy="45%"
+                      outerRadius={70}
+                      innerRadius={30}
+                      paddingAngle={3}
+                      labelLine={false}
+                      label={({ name, percent }) => 
+                        percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ''
+                      }
                     >
                       {behaviorTotals.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[entry.name]} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip 
+                      formatter={(value, name) => [`${value}`, name]}
+                      labelFormatter={(label) => `${label}`}
+                    />
+                    <Legend 
+                      verticalAlign="bottom" 
+                      height={50}
+                      iconType="circle"
+                      formatter={(value) => (
+                        <span style={{ color: '#666', fontSize: '12px' }}>
+                          {value}
+                        </span>
+                      )}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -208,10 +228,25 @@ export default function ClassroomDashboard() {
                 <ResponsiveContainer>
                   <LineChart data={attentiveSeries}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="name" interval={Math.max(0, Math.floor(attentiveSeries.length / 8))} className="text-xs" />
-                    <YAxis domain={[0, 100]} className="text-xs" />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="AttentivePct" stroke={COLORS.Attentive} strokeWidth={3} dot={false} />
+                    <XAxis 
+                      dataKey="time" 
+                      interval={Math.max(0, Math.floor(attentiveSeries.length / 8))} 
+                      className="text-xs"
+                      tickFormatter={(value) => value}
+                    />
+                    <YAxis domain={[0, 100]} className="text-xs" label={{ value: '%', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip 
+                      formatter={(value, name) => [`${value}%`, name]}
+                      labelFormatter={(label) => `Time: ${label}`}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="AttentivePct" 
+                      stroke={COLORS.Attentive} 
+                      strokeWidth={3} 
+                      dot={{ r: 4 }}
+                      name="Attentive"
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>

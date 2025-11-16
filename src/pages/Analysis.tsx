@@ -88,7 +88,7 @@ export default function Analysis() {
   const engagementOverTimeData = useMemo(() => {
     if (records.length === 0) return [];
     
-    // Group by 5-minute intervals
+    // Group by 10-second intervals for better granularity
     const timeMap = new Map<string, { 
       Attentive: number, 
       Sleeping: number, 
@@ -99,7 +99,7 @@ export default function Analysis() {
     
     records.forEach(record => {
       const date = new Date(record.timestamp);
-      const intervalKey = `${date.getHours()}:${String(Math.floor(date.getMinutes() / 5) * 5).padStart(2, '0')}`;
+      const intervalKey = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(Math.floor(date.getSeconds() / 10) * 10).padStart(2, '0')}`;
       
       if (!timeMap.has(intervalKey)) {
         timeMap.set(intervalKey, { Attentive: 0, Sleeping: 0, Talking: 0, Phone: 0, total: 0 });
@@ -167,16 +167,20 @@ export default function Analysis() {
                 <h3 className="text-sm font-medium text-muted-foreground mb-4">
                   Behavior Distribution
                 </h3>
-                <div style={{ width: "100%", height: 300 }}>
+                <div style={{ width: "100%", height: 350 }}>
                   <ResponsiveContainer>
-                    <PieChart>
+                    <PieChart margin={{ top: 20, right: 20, bottom: 60, left: 20 }}>
                       <Pie
                         data={pieData}
                         cx="50%"
-                        cy="50%"
+                        cy="45%"
                         labelLine={false}
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={80}
+                        label={({ name, percent }) => 
+                          percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ''
+                        }
+                        outerRadius={70}
+                        innerRadius={30}
+                        paddingAngle={3}
                         fill="#8884d8"
                         dataKey="value"
                       >
@@ -184,7 +188,20 @@ export default function Analysis() {
                           <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip 
+                        formatter={(value, name) => [`${value}`, name]}
+                        labelFormatter={(label) => `${label}`}
+                      />
+                      <Legend 
+                        verticalAlign="bottom" 
+                        height={50}
+                        iconType="circle"
+                        formatter={(value) => (
+                          <span style={{ color: '#666', fontSize: '12px' }}>
+                            {value}
+                          </span>
+                        )}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -216,17 +233,57 @@ export default function Analysis() {
               </h3>
               <div style={{ width: "100%", height: 300 }}>
                 <ResponsiveContainer>
-                  <AreaChart data={engagementOverTimeData}>
+                  <LineChart data={engagementOverTimeData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="time" className="text-xs" />
-                    <YAxis className="text-xs" label={{ value: '%', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip />
+                    <XAxis 
+                      dataKey="time" 
+                      className="text-xs"
+                      interval={Math.max(0, Math.floor(engagementOverTimeData.length / 8))}
+                      tickFormatter={(value) => value}
+                    />
+                    <YAxis 
+                      className="text-xs" 
+                      domain={[0, 100]}
+                      label={{ value: '%', angle: -90, position: 'insideLeft' }} 
+                    />
+                    <Tooltip 
+                      formatter={(value, name) => [`${value}%`, name]}
+                      labelFormatter={(label) => `Time: ${label}`}
+                    />
                     <Legend />
-                    <Area type="monotone" dataKey="Attentive" stackId="1" stroke={COLORS.Attentive} fill={COLORS.Attentive} />
-                    <Area type="monotone" dataKey="Sleeping" stackId="1" stroke={COLORS.Sleeping} fill={COLORS.Sleeping} />
-                    <Area type="monotone" dataKey="Talking" stackId="1" stroke={COLORS.Talking} fill={COLORS.Talking} />
-                    <Area type="monotone" dataKey="Phone" stackId="1" stroke={COLORS.Phone} fill={COLORS.Phone} />
-                  </AreaChart>
+                    <Line 
+                      type="monotone" 
+                      dataKey="Attentive" 
+                      stroke={COLORS.Attentive} 
+                      strokeWidth={3} 
+                      dot={{ r: 4 }}
+                      name="Attentive"
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="Sleeping" 
+                      stroke={COLORS.Sleeping} 
+                      strokeWidth={2} 
+                      dot={{ r: 3 }}
+                      name="Sleeping"
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="Talking" 
+                      stroke={COLORS.Talking} 
+                      strokeWidth={2} 
+                      dot={{ r: 3 }}
+                      name="Talking"
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="Phone" 
+                      stroke={COLORS.Phone} 
+                      strokeWidth={2} 
+                      dot={{ r: 3 }}
+                      name="Phone"
+                    />
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
